@@ -74,10 +74,11 @@ async def parse_post(req: PostRequest):
         }
 
         ollama_base = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+        ollama_timeout = int(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "300"))
         resp = requests.post(
             f"{ollama_base}/api/generate",
             json=payload,
-            timeout=60,
+            timeout=ollama_timeout,
         )
 
         resp.raise_for_status()
