@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual env
+venv/
+.venv/
+env/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Google / ключи сервисного аккаунта и прочие секреты в JSON
+*credentials*.json
+
+# Локальные данные (compose: ./data)
+data/
+
+# Логи приложения (см. LOG_DIR)
+logs/
+
+# SQLite
+*.db
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Тесты / покрытие
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
