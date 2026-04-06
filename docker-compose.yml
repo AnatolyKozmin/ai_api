@@ -6,8 +6,6 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     ports:
       - "8011:8011"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://172.17.0.1:11434}
     restart: unless-stopped
