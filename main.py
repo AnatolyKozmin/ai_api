@@ -123,7 +123,11 @@ async def parse_post(req: PostRequest):
                 elif sheets_detail == "not_configured":
                     sheets_skipped = True
             except Exception as e:
-                sheets_error = str(e)
+                msg = str(e)
+                r = getattr(e, "response", None)
+                if r is not None and getattr(r, "text", None):
+                    msg = f"{msg} | {r.text[:800]}"
+                sheets_error = msg
                 logger.exception("Google Sheets append failed: %s", e)
 
         logger.info(

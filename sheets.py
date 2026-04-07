@@ -7,6 +7,7 @@ from typing import Any
 import gspread
 from dotenv import load_dotenv
 from gspread import Worksheet
+from gspread.exceptions import WorksheetNotFound
 from google.oauth2.service_account import Credentials
 
 _ROOT = Path(__file__).resolve().parent
@@ -76,7 +77,17 @@ def append_vacancy_row(parsed: dict[str, Any]) -> tuple[bool, str | None]:
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(spreadsheet_id)
     sheet_name = (os.environ.get("GOOGLE_SHEET_NAME", "").strip() or "Вакансии")
-    ws = sh.worksheet(sheet_name)
+    try:
+        ws = sh.worksheet(sheet_name)
+    except WorksheetNotFound:
+        ws = sh.add_worksheet(title=sheet_name, rows=5000, cols=15)
+    except Exception as e:
+        resp = getattr(e, "response", None)
+        code = getattr(resp, "status_code", None) if resp is not None else None
+        if code == 404:
+            ws = sh.add_worksheet(title=sheet_name, rows=5000, cols=15)
+        else:
+            raise
 
     first_data_row = int(os.environ.get("GOOGLE_SHEET_FIRST_DATA_ROW", "3"))
     next_row = _first_empty_row_from_col_a(ws, first_data_row)
