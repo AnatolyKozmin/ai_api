@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import gspread
+from dotenv import load_dotenv
 from gspread import Worksheet
 from google.oauth2.service_account import Credentials
+
+_ROOT = Path(__file__).resolve().parent
+load_dotenv(_ROOT / ".env")
 
 _SCOPES = (
     "https://www.googleapis.com/auth/spreadsheets",
@@ -14,9 +19,15 @@ _SCOPES = (
 
 
 def _credentials_path() -> str | None:
-    return os.environ.get("GOOGLE_SHEETS_CREDENTIALS") or os.environ.get(
+    raw = os.environ.get("GOOGLE_SHEETS_CREDENTIALS") or os.environ.get(
         "GOOGLE_APPLICATION_CREDENTIALS"
     )
+    if not raw:
+        return None
+    p = Path(raw)
+    if not p.is_absolute():
+        p = _ROOT / p
+    return str(p)
 
 
 def _first_empty_row_from_col_a(ws: Worksheet, start_row: int) -> int:
