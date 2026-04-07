@@ -2,8 +2,13 @@ import logging
 import os
 import re
 import json
+from pathlib import Path
+
 import requests
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from logging_config import setup_logging
 from schemas import PostRequest
