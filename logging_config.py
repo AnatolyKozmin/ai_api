@@ -1,5 +1,3 @@
-"""Настройка логов: app.log (INFO+), errors.log (только ERROR), консоль."""
-
 from __future__ import annotations
 
 import logging

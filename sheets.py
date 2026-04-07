@@ -45,11 +45,21 @@ def _first_empty_row_from_col_a(ws: Worksheet, start_row: int) -> int:
     return start_row
 
 
-def _row_from_parsed(parsed: dict[str, Any]) -> list[str]:
+def _row_from_parsed(
+    parsed: dict[str, Any],
+    post_url: str | None,
+    post_text: str | None,
+) -> list[str]:
     def s(key: str) -> str:
         v = parsed.get(key, "")
         return str(v).strip() if v is not None else ""
 
+    def cell(v: str | None) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    # A–L: поля из LLM; M: ссылка на пост; N: полный текст вакансии
     return [
         s("organization"),
         s("division"),
@@ -63,10 +73,17 @@ def _row_from_parsed(parsed: dict[str, Any]) -> list[str]:
         s("feature1"),
         s("feature2"),
         s("feature3"),
+        cell(post_url),
+        cell(post_text),
     ]
 
 
-def append_vacancy_row(parsed: dict[str, Any]) -> tuple[bool, str | None]:
+def append_vacancy_row(
+    parsed: dict[str, Any],
+    *,
+    post_url: str | None = None,
+    post_text: str | None = None,
+) -> tuple[bool, str | None]:
     path = _credentials_path()
     spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID", "").strip()
 
@@ -80,19 +97,19 @@ def append_vacancy_row(parsed: dict[str, Any]) -> tuple[bool, str | None]:
     try:
         ws = sh.worksheet(sheet_name)
     except WorksheetNotFound:
-        ws = sh.add_worksheet(title=sheet_name, rows=5000, cols=15)
+        ws = sh.add_worksheet(title=sheet_name, rows=5000, cols=20)
     except Exception as e:
         resp = getattr(e, "response", None)
         code = getattr(resp, "status_code", None) if resp is not None else None
         if code == 404:
-            ws = sh.add_worksheet(title=sheet_name, rows=5000, cols=15)
+            ws = sh.add_worksheet(title=sheet_name, rows=5000, cols=20)
         else:
             raise
 
     first_data_row = int(os.environ.get("GOOGLE_SHEET_FIRST_DATA_ROW", "3"))
     next_row = _first_empty_row_from_col_a(ws, first_data_row)
 
-    row = _row_from_parsed(parsed)
-    rng = f"A{next_row}:L{next_row}"
+    row = _row_from_parsed(parsed, post_url, post_text)
+    rng = f"A{next_row}:N{next_row}"
     ws.update(rng, [row], value_input_option="USER_ENTERED")
     return True, None

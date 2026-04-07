@@ -3,10 +3,11 @@ import os
 import re
 import json
 from pathlib import Path
+from typing import Annotated
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -18,6 +19,21 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title='CT AI API')
+
+
+def _ingest_secret_expected() -> str:
+    return os.environ.get("INGEST_SECRET", "").strip()
+
+
+async def verify_ingest_secret(
+    x_ingest_secret: Annotated[str | None, Header(alias="X-Ingest-Secret")] = None,
+) -> None:
+    """Если задан INGEST_SECRET в окружении API — требуем такой же заголовок от бота."""
+    expected = _ingest_secret_expected()
+    if not expected:
+        return
+    if not x_ingest_secret or x_ingest_secret != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Ingest-Secret")
 
 SYSTEM_PROMPT = """
 Ты изучаешь текст из Telegram‑поста. Твоя задача определить, является ли этот пост
@@ -45,6 +61,12 @@ SYSTEM_PROMPT = """
 Выведи **только валидный JSON**. Не добавляй никаких пояснений, комментариев, markdown, текста вокруг JSON.
 Если какое‑то поле неизвестно, поставь вместо него пустую строку, но не удаляй ключ.
 
+Перед текстом поста может быть блок «Контекст источника» с username и названием Telegram‑канала.
+Если в тексте поста организация‑работодатель не указана, используй этот контекст: для канала одной компании
+заполни organization названием бренда, выводимым из названия канала и/или @username (без выдумывания —
+если нельзя уверенно сопоставить с компанией, оставь organization пустым); если канал по смыслу агрегирует
+чужие вакансии и работодатель в посте не назван — organization оставь пустым.
+
 Пример ответа:
 {
   "organization": "С科技",
@@ -64,17 +86,54 @@ SYSTEM_PROMPT = """
 """
 
 
-@app.post("/parse_post")
+def _post_with_source_context(req: PostRequest) -> str:
+    """Текст поста + блок про ТГК для модели."""
+    lines: list[str] = []
+    if req.channel_username or req.chat_title:
+        lines.append("Контекст источника (Telegram-канал):")
+        if req.channel_username:
+            lines.append(f"- Юзернейм: @{req.channel_username}")
+        if req.chat_title:
+            lines.append(f"- Название: «{req.chat_title}»")
+        lines.append("")
+    lines.append("Пост:")
+    lines.append(req.text)
+    return "\n".join(lines)
+
+
+def _ollama_full_prompt(req: PostRequest) -> str:
+    """
+    Сборка промпта для Ollama.
+
+    - system_prompt не задан в запросе (null) — используется встроенный SYSTEM_PROMPT API.
+    - system_prompt задан (включая "") — только он как «системная» часть; пустая строка = без системных инструкций,
+      в промпт попадает лишь пользовательский блок (контекст канала + пост).
+    """
+    user_block = _post_with_source_context(req)
+    if req.system_prompt is None:
+        return f"{SYSTEM_PROMPT}\n\n{user_block}"
+    system = req.system_prompt.strip()
+    if not system:
+        return user_block
+    return f"{system}\n\n{user_block}"
+
+
+@app.post("/parse_post", dependencies=[Depends(verify_ingest_secret)])
 async def parse_post(req: PostRequest):
     try:
         logger.info(
-            "parse_post model=%s text_len=%s",
+            "parse_post job_id=%s chat=%s ch_user=%s msg_id=%s model=%s text_len=%s system=%s",
+            req.id,
+            req.chat_id,
+            req.channel_username,
+            req.message_id,
             req.model,
             len(req.text) if req.text else 0,
+            "client" if req.system_prompt is not None else "api_default",
         )
         payload = {
             "model": req.model,
-            "prompt": f"{SYSTEM_PROMPT}\n\nПост:\n{req.text}",
+            "prompt": _ollama_full_prompt(req),
             "stream": False
         }
 
@@ -117,7 +176,11 @@ async def parse_post(req: PostRequest):
 
         if parsed:
             try:
-                ok, sheets_detail = append_vacancy_row(parsed)
+                ok, sheets_detail = append_vacancy_row(
+                    parsed,
+                    post_url=req.url,
+                    post_text=req.text,
+                )
                 if ok:
                     sheets_appended = True
                 elif sheets_detail == "not_configured":
